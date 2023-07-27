@@ -1,0 +1,2 @@
+Subject_ID,Age,ASD_administered,Gender,MRI_Age,AmygdalaLeft,CaudateLeft,GlobusPallidusLeft,HippocampusLeft,LatVentsLeft,PutamenLeft,ThalamusLeft,ICV,Crbm_totTissLeft,Cblm_totTissLeft,AmygdalaRight,CaudateRight,GlobusPallidusRight,HippocampusRight,LatVentsRight,PutamenRight,ThalamusRight,Crbm_totTissRight,Cblm_totTissRight
+107524,0,1,0,6.3333,710,1687,510,1630,2899.0,2321,4497,828474,303289,38218,680,1798,525,1480,4941.0,2230,4574,308816,38968
