@@ -1,5 +1,6 @@
 import sys
 sys.path.insert(0, './../Utils')
+import argparse
 
 import numpy as np
 import torch
@@ -11,128 +12,120 @@ from pytorch_lightning.loggers import TensorBoardLogger
 import monai
 import nibabel as nib
 
-
 from net import IcoConvNet
 from data import BrainIBISDataModule
 from logger import ImageLogger
 
 from transformation import RandomRotationTransform,ApplyRotationTransform, GaussianNoisePointTransform, NormalizePointTransform, CenterTransform
 
+def main(args,arg_groups):
 
-print("Import // done")
-
-def main():
-
-    ##############################################################################################Hyperparamters
-    batch_size = 2
-    num_workers = 12 
-    image_size = 224
-    noise_lvl = 0.01
-    dropout_lvl = 0.2
-    num_epochs = 1000
-    ico_lvl = 2 #minimum level is 1
-    pretrained = False #True,False
-    if ico_lvl == 1:
-        radius = 1.76 
-    elif ico_lvl == 2:
-        radius = 1
-    lr = 1e-4
-    print('lr : ',lr)
-
-    #parameters for GaussianNoiseTransform
-    mean = 0
-    std = 0.005
-
-    #parameters for EarlyStopping
-    min_delta_early_stopping = 0.00
-    patience_early_stopping = 100
-
-    #Paths
-    path_data = "/ASD/Autism/IBIS/Proc_Data/IBIS_sa_eacsf_thickness"
-
-    data_train = "../Data/V06-12_train.csv"
-    data_val = "../Data/V06-12_val.csv"
-    data_test = "../Data/V06-12_test.csv"
-
-    path_ico_left = '../3DObject/sphere_f327680_v163842.vtk'
-    path_ico_right = '../3DObject/sphere_f327680_v163842.vtk'  
-    list_path_ico = [path_ico_left,path_ico_right]
+    list_path_ico = [args.path_ico_left,args.path_ico_right]
 
     ###Demographics
-    list_demographic = ['Gender','MRI_Age','AmygdalaLeft','HippocampusLeft','LatVentsLeft','ICV','Crbm_totTissLeft','Cblm_totTissLeft','AmygdalaRight','HippocampusRight','LatVentsRight','Crbm_totTissRight','Cblm_totTissRight']#MLR
+    list_demographic = ['Gender','MRI_Age','AmygdalaLeft','HippocampusLeft','LatVentsLeft','ICV','Crbm_totTissLeft','Cblm_totTissLeft','AmygdalaRight','HippocampusRight','LatVentsRight','Crbm_totTissRight','Cblm_totTissRight'] #MLR
 
     ###Transformation
     list_train_transform = [] 
     list_train_transform.append(CenterTransform())
     list_train_transform.append(NormalizePointTransform())
     list_train_transform.append(RandomRotationTransform())        
-    list_train_transform.append(GaussianNoisePointTransform(mean,std)) # Don't use this transformation if your object isn't a sphere
+    list_train_transform.append(GaussianNoisePointTransform(args.mean,args.std)) # Don't use this transformation if your object isn't a sphere
     list_train_transform.append(NormalizePointTransform()) # Don't use this transformation if your object isn't a sphere
-
     train_transform = monai.transforms.Compose(list_train_transform)
 
     list_val_and_test_transform = []    
     list_val_and_test_transform.append(CenterTransform())
     list_val_and_test_transform.append(NormalizePointTransform())
-
     val_and_test_transform = monai.transforms.Compose(list_val_and_test_transform)
 
-    ###Layer
-    Layer = 'IcoConv2D' #'Att','IcoConv2D','IcoConv1D','IcoLinear'
-    #Choose between these 4 choices to choose what kind of model you want to use. 
-
-    ###Name
-    name = 'Experiment0'
-    #name of your experiment
-
+    ### Get number of images
+    list_nb_verts_ico = [12, 42, 162, 642, 2562, 10242, 40962, 163842]
+    nb_images = list_nb_verts_ico[args.ico_lvl-1]
     
-
-    ##############################################################################################
-    
-
-    ###Get number of images
-    list_nb_verts_ico = [12,42,162, 642, 2562, 10242, 40962, 163842]
-    nb_images = list_nb_verts_ico[ico_lvl-1]
-
-
-    
-    ###Creation of Dataset
-    brain_data = BrainIBISDataModule(batch_size,list_demographic,path_data,data_train,data_val,data_test,list_path_ico,train_transform = train_transform,val_and_test_transform =val_and_test_transform,num_workers=num_workers)#MLR
+    ### Creation of Dataset
+    brain_data = BrainIBISDataModule(args.batch_size,list_demographic,args.path_data,args.data_train,args.data_val,args.data_test,list_path_ico,train_transform = train_transform,val_and_test_transform =val_and_test_transform,num_workers=args.num_workers)#MLR
     nbr_features = brain_data.get_features()
     weights = brain_data.get_weigths()
     nbr_demographic = brain_data.get_nbr_demographic()
 
-
+    if args.ico_lvl == 1:
+        radius = 1.76 
+    elif args.ico_lvl == 2:
+        radius = 1
     #Creation of our model
-    model = IcoConvNet(Layer,pretrained,nbr_features,nbr_demographic,dropout_lvl,image_size,noise_lvl,ico_lvl,batch_size,weights,radius=radius,lr=lr,name=name)#MLR
+    model = IcoConvNet(args.layer,args.pretrained,nbr_features,nbr_demographic,args.dropout_lvl,args.image_size,args.noise_lvl,args.ico_lvl,args.batch_size,weights,radius=radius,lr=args.lr,name=args.name)#MLR
 
     #Creation of Checkpoint (if we want to save best models)
-    checkpoint_callback_loss = ModelCheckpoint(
-        dirpath='../Checkpoint/'+name,
-        filename='{epoch}-{val_loss:.2f}',
-        save_top_k=10,
-        monitor='val_loss',
-    )
+    checkpoint_callback_loss = ModelCheckpoint(dirpath='../Checkpoint/'+args.name,filename='{epoch}-{val_loss:.2f}',save_top_k=10,monitor='val_loss',)
 
     #Logger (Useful if we use Tensorboard)
     logger = TensorBoardLogger(save_dir="test_tensorboard", name="my_model")
 
     #Early Stopping
-    early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=min_delta_early_stopping, patience=patience_early_stopping, verbose=True, mode="min")
-
-    print('nombre de features : ',nbr_features)
+    early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=args.min_delta_early_stopping, patience=args.patience_early_stopping, verbose=True, mode="min")
 
     #Image Logger (Useful if we use Tensorboard)
-    image_logger = ImageLogger(num_features = nbr_features,num_images = nb_images,mean = 0,std=noise_lvl)
-
-
+    image_logger = ImageLogger(num_features = nbr_features,num_images = nb_images,mean = 0,std=args.noise_lvl)
 
     ###Trainer
-    trainer = Trainer(log_every_n_steps=10,reload_dataloaders_every_n_epochs=True,logger=logger,max_epochs=num_epochs,callbacks=[early_stop_callback,checkpoint_callback_loss,image_logger],accelerator="gpu") #,accelerator="gpu"
-
+    trainer = Trainer(log_every_n_steps=10,reload_dataloaders_every_n_epochs=True,logger=logger,max_epochs=args.num_epochs,callbacks=[early_stop_callback,checkpoint_callback_loss,image_logger],accelerator="gpu") #,accelerator="gpu"
     trainer.fit(model,datamodule=brain_data)
-
     trainer.test(model, datamodule=brain_data)
 
+    print('Number of features : ',nbr_features)
+
+
+
+
+def cml():
+    #Command line arguments
+    parser = argparse.ArgumentParser(description='IcoConv : Brain cortical surface analysis')
+    
+    ##Hyperparameters
+    hyperparameters_group = parser.add_argument_group('Hyperparameters')
+    hyperparameters_group.add_argument('--batch_size', type=int, default=2, help='Input batch size for training (default: 2)')
+    hyperparameters_group.add_argument('--num_workers', type=int, default=12, help='Number of workers (default: 12)')
+    hyperparameters_group.add_argument('--image_size', type=int, default=224, help='Image size (default: 224)')
+    hyperparameters_group.add_argument('--noise_lvl', type=float, default=0.01, help='Noise level (default: 0.01)')
+    hyperparameters_group.add_argument('--dropout_lvl', type=float, default=0.2, help='Dropout level (default: 0.2)')
+    hyperparameters_group.add_argument('--num_epochs', type=int, default=1000, help='Number of epochs (default: 1000)')
+    hyperparameters_group.add_argument('--ico_lvl', type=int, default=2, help='Ico level, minimum level is 1 (default: 2)')
+    hyperparameters_group.add_argument('--pretrained', type=bool, default=False, help='Pretrained (default: False)')
+    hyperparameters_group.add_argument('--lr', type=float, default=1e-4, help='Learning rate (default: 1e-4)')
+
+    ##Gaussian Filter
+    gaussian_group = parser.add_argument_group('Gaussian filter')
+    gaussian_group.add_argument('--mean', type=float, default=0, help='Mean (default: 0)')
+    gaussian_group.add_argument('--std', type=float, default=0.005, help='Standard deviation (default: 0.005)')
+
+    ##Early Stopping
+    early_stopping_group = parser.add_argument_group('Early stopping')
+    early_stopping_group.add_argument('--min_delta_early_stopping', type=float, default=0.00, help='Minimum delta (default: 0.00)')
+    early_stopping_group.add_argument('--patience_early_stopping', type=int, default=100, help='Patience (default: 100)')
+
+    ##Paths
+    paths_group = parser.add_argument_group('Paths to data')
+    paths_group.add_argument('--path_data', type=str, default='/ASD/Autism/IBIS/Proc_Data/IBIS_sa_eacsf_thickness', help='Path to data (default: /ASD/Autism/IBIS/Proc_Data/IBIS_sa_eacsf_thickness)')
+    paths_group.add_argument('--data_train', type=str, default='../Data/V06-12_train.csv', help='Path to train data (default: ../Data/V06-12_train.csv)')
+    paths_group.add_argument('--data_val', type=str, default='../Data/V06-12_val.csv', help='Path to validation data (default: ../Data/V06-12_val.csv)')
+    paths_group.add_argument('--data_test', type=str, default='../Data/V06-12_test.csv', help='Path to test data (default: ../Data/V06-12_test.csv)')
+    paths_group.add_argument('--path_ico_left', type=str, default='../3DObject/sphere_f327680_v163842.vtk', help='Path to ico left (default: ../3DObject/sphere_f327680_v163842.vtk)')
+    paths_group.add_argument('--path_ico_right', type=str, default='../3DObject/sphere_f327680_v163842.vtk', help='Path to ico right (default: ../3DObject/sphere_f327680_v163842.vtk)')
+
+    ##Name and layer
+    name_group = parser.add_argument_group('Name and layer')
+    name_group.add_argument('--layer', type=str, default='IcoConv2D', help="Layer, choose between 'Att','IcoConv2D','IcoConv1D','IcoLinear' (default: IcoConv2D)")
+    name_group.add_argument('--name', type=str, default='Experiment0', help='Name of your experiment (default: Experiment0)')
+
+    args = parser.parse_args()
+    arg_groups = {}
+    for group in parser._action_groups:
+        arg_groups[group.title] = {a.dest:getattr(args,a.dest,None) for a in group._group_actions}
+
+    main(args,arg_groups)
+
+
+
 if __name__ == '__main__':
-    main()
+    cml()

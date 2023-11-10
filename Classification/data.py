@@ -1,6 +1,7 @@
 import numpy as np
 import random
 import torch
+import os 
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 import pytorch_lightning as pl 
@@ -33,13 +34,24 @@ class BrainIBISDataset(Dataset):
         return(len(self.df)) 
 
     def __getitem__(self,idx):
-
-
         #Get item for each hemisphere (left and right)
         vertsL, facesL, vertex_featuresL, face_featuresL,demographic,Y = self.getitem_per_hemisphere('left', idx)
         vertsR, facesR, vertex_featuresR, face_featuresR,demographic,Y = self.getitem_per_hemisphere('right', idx)
-
         return  vertsL, facesL, vertex_featuresL, face_featuresL, vertsR, facesR, vertex_featuresR, face_featuresR,demographic, Y
+    
+    def get_data(self,hemisphere,version,number_brain,type_data):
+        #Load data from the paths
+        if type_data=='eacsf':
+            path = f"{self.path_data}/{number_brain}/{version}/eacsf/{hemisphere}_eacsf.txt"
+        elif type_data=='sa':
+            path = f"{self.path_data}/{number_brain}/{version}/sa/{hemisphere}_sa.txt"
+        elif type_data=='thickness':
+            path = f"{self.path_data}/{number_brain}/{version}/thickness/{hemisphere}_thickness.txt"
+        else:
+            raise ValueError(f"Type of data {type_data} is not supported")
+        data = open(path,"r").read().splitlines()
+        data = torch.tensor([float(ele) for ele in data])
+        return data
     
     def getitem_per_hemisphere(self,hemisphere,idx):
         #Load Data
@@ -51,22 +63,9 @@ class BrainIBISDataset(Dataset):
         version = l_version[idx_version]
 
         l_features = []
-
-        path_eacsf = f"{self.path_data}/{number_brain}/{version}/eacsf/{hemisphere}_eacsf.txt"
-        path_sa =    f"{self.path_data}/{number_brain}/{version}/sa/{hemisphere}_sa.txt"
-        path_thickness = f"{self.path_data}/{number_brain}/{version}/thickness/{hemisphere}_thickness.txt"
-
-        eacsf = open(path_eacsf,"r").read().splitlines()
-        eacsf = torch.tensor([float(ele) for ele in eacsf])
-        l_features.append(eacsf.unsqueeze(dim=1))
-
-        sa = open(path_sa,"r").read().splitlines()
-        sa = torch.tensor([float(ele) for ele in sa])
-        l_features.append(sa.unsqueeze(dim=1))
-
-        thickness = open(path_thickness,"r").read().splitlines()
-        thickness = torch.tensor([float(ele) for ele in thickness])
-        l_features.append(thickness.unsqueeze(dim=1))
+        l_features.append(self.get_data(hemisphere,version,number_brain,'eacsf').unsqueeze(dim=1))
+        l_features.append(self.get_data(hemisphere,version,number_brain,'sa').unsqueeze(dim=1))
+        l_features.append(self.get_data(hemisphere,version,number_brain,'thickness').unsqueeze(dim=1))
 
         vertex_features = torch.cat(l_features,dim=1)
 
@@ -101,6 +100,7 @@ class BrainIBISDataset(Dataset):
 
         return verts, faces,vertex_features,face_features,demographic, Y
 
+
 class BrainIBISDataModule(pl.LightningDataModule):
     def __init__(self,batch_size,list_demographic,path_data,data_train,data_val,data_test,list_path_ico,train_transform=None,val_and_test_transform=None, num_workers=6, pin_memory=False, persistent_workers=False,name_class='ASD_administered'):
         super().__init__()
@@ -123,25 +123,25 @@ class BrainIBISDataModule(pl.LightningDataModule):
         self.df_train = pd.read_csv(self.data_train)
         self.df_val = pd.read_csv(self.data_val)
         self.df_test = pd.read_csv(self.data_test)
-        
-        y_train = np.array(self.df_train.loc[:,self.name_class])
-        labels = np.unique(y_train)
-        class_weights_train  = torch.tensor(class_weight.compute_class_weight('balanced',classes=labels,y=y_train)).to(torch.float32) 
-        self.weights.append(class_weights_train)
-
-        y_val = np.array(self.df_val.loc[:,self.name_class])
-        class_weights_val = torch.tensor(class_weight.compute_class_weight('balanced',classes=labels,y=y_val)).to(torch.float32)
-        self.weights.append(class_weights_val) 
-
-        y_test = np.array(self.df_test.loc[:,self.name_class])
-        class_weights_test = torch.tensor(class_weight.compute_class_weight('balanced',classes=labels,y=y_test)).to(torch.float32)
-        self.weights.append(class_weights_test) 
+        self.weights = self.class_weights()
 
         self.setup()
 
+    
+    def class_weights(self):
+        class_weights_train = self.compute_class_weights(self.data_train)
+        class_weights_val = self.compute_class_weights(self.data_val)
+        class_weights_test = self.compute_class_weights(self.data_test)
+        return [class_weights_train, class_weights_val, class_weights_test]
+
+    def compute_class_weights(self, data_file):
+        df = pd.read_csv(data_file)
+        y = np.array(df.loc[:, self.name_class])
+        labels = np.unique(y)
+        class_weights = torch.tensor(class_weight.compute_class_weight('balanced', classes=labels, y=y)).to(torch.float32)
+        return class_weights
 
     def setup(self,stage=None):
-
         # Assign train/val datasets for use in dataloaders
         self.train_dataset = BrainIBISDataset(self.df_train,self.list_demographic,self.path_data,self.list_path_ico,self.train_transform)
         self.val_dataset = BrainIBISDataset(self.df_val,self.list_demographic,self.path_data,self.list_path_ico,self.val_and_test_transform)
@@ -152,7 +152,7 @@ class BrainIBISDataModule(pl.LightningDataModule):
         self.nbr_demographic = demographic.shape[0]
 
     def train_dataloader(self):    
-        return DataLoader(self.train_dataset,batch_size=self.batch_size,shuffle=True, num_workers=self.num_workers, pin_memory=self.pin_memory, persistent_workers=self.persistent_workers)
+        return DataLoader(self.train_dataset,batch_size=self.batch_size,shuffle=True, num_workers=self.num_workers, pin_memory=self.pin_memory, persistent_workers=self.persistent_workers, drop_last=True)
 
     def repeat_subject(self,df,final_size):
         n = len(df)
@@ -163,10 +163,10 @@ class BrainIBISDataModule(pl.LightningDataModule):
         return new_df
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset,batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=self.pin_memory, persistent_workers=self.persistent_workers)        
+        return DataLoader(self.val_dataset,batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=self.pin_memory, persistent_workers=self.persistent_workers, drop_last=True)        
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset,batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=self.pin_memory, persistent_workers=self.persistent_workers)
+        return DataLoader(self.test_dataset,batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=self.pin_memory, persistent_workers=self.persistent_workers, drop_last=True)
 
     def get_features(self):
         return self.nbr_features

@@ -34,10 +34,14 @@ class ImageLogger(Callback):
                 images = torch.cat([images,t_zeros],dim=2)     
 
                 grid_images = torchvision.utils.make_grid(images[0, 0:self.num_images, 0:self.num_features+1, :, :])
-                trainer.logger.experiment.add_image('Image features', grid_images, pl_module.global_step)
+                numpy_grid_images = grid_images.cpu().numpy()
+                trainer.logger.experiment.add_image('Image features', numpy_grid_images, pl_module.global_step)
+                # trainer.logger.experiment.add_image('Image features', grid_images, pl_module.global_step)
 
                 images_noiseM = pl_module.noise(images)
 
                 grid_images_noiseM = torchvision.utils.make_grid(images_noiseM[0, 0:self.num_images, 0:self.num_features+1, :, :])
-                trainer.logger.experiment.add_image('Image + noise M ', grid_images_noiseM, pl_module.global_step)
+                numpy_grid_images_noiseM = grid_images_noiseM.cpu().numpy()
+                trainer.logger.experiment.add_image('Image + noise M ', numpy_grid_images_noiseM, pl_module.global_step)
+                # trainer.logger.experiment.add_image('Image + noise M ', grid_images_noiseM, pl_module.global_step)
        
