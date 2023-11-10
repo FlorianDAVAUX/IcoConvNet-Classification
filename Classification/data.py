@@ -37,35 +37,33 @@ class BrainIBISDataset(Dataset):
         #Get item for each hemisphere (left and right)
         vertsL, facesL, vertex_featuresL, face_featuresL,demographic,Y = self.getitem_per_hemisphere('left', idx)
         vertsR, facesR, vertex_featuresR, face_featuresR,demographic,Y = self.getitem_per_hemisphere('right', idx)
-        return  vertsL, facesL, vertex_featuresL, face_featuresL, vertsR, facesR, vertex_featuresR, face_featuresR,demographic, Y
+        return  vertsL, facesL, vertex_featuresL, face_featuresL, vertsR, facesR, vertex_featuresR, face_featuresR,demographic, Y 
     
-    def get_data(self,hemisphere,version,number_brain,type_data):
-        #Load data from the paths
-        if type_data=='eacsf':
-            path = f"{self.path_data}/{number_brain}/{version}/eacsf/{hemisphere}_eacsf.txt"
-        elif type_data=='sa':
-            path = f"{self.path_data}/{number_brain}/{version}/sa/{hemisphere}_sa.txt"
-        elif type_data=='thickness':
-            path = f"{self.path_data}/{number_brain}/{version}/thickness/{hemisphere}_thickness.txt"
-        else:
-            raise ValueError(f"Type of data {type_data} is not supported")
+    def data_to_tensor(self,path):
         data = open(path,"r").read().splitlines()
         data = torch.tensor([float(ele) for ele in data])
         return data
-    
+
     def getitem_per_hemisphere(self,hemisphere,idx):
         #Load Data
         row = self.df.loc[idx]
-        number_brain = str(int(row[self.column_subject_ID]))
-
-        l_version = ['V06','V12']
-        idx_version = int(self.df.loc[idx,self.column_age])
-        version = l_version[idx_version]
+        path_left_eacsf = row['PathLeftEACSF']
+        path_right_eacsf = row['PathRightEACSF']
+        path_left_sa = row['PathLeftSa']
+        path_right_sa = row['PathRightSa']
+        path_left_thickness = row['PathLeftThickness']
+        path_right_thickness = row['PathRightThickness']
 
         l_features = []
-        l_features.append(self.get_data(hemisphere,version,number_brain,'eacsf').unsqueeze(dim=1))
-        l_features.append(self.get_data(hemisphere,version,number_brain,'sa').unsqueeze(dim=1))
-        l_features.append(self.get_data(hemisphere,version,number_brain,'thickness').unsqueeze(dim=1))
+
+        if hemisphere == 'left':
+            l_features.append(self.data_to_tensor(path_left_eacsf).unsqueeze(dim=1))
+            l_features.append(self.data_to_tensor(path_left_sa).unsqueeze(dim=1))
+            l_features.append(self.data_to_tensor(path_left_thickness).unsqueeze(dim=1))
+        else:
+            l_features.append(self.data_to_tensor(path_right_eacsf).unsqueeze(dim=1))
+            l_features.append(self.data_to_tensor(path_right_sa).unsqueeze(dim=1))
+            l_features.append(self.data_to_tensor(path_right_thickness).unsqueeze(dim=1))
 
         vertex_features = torch.cat(l_features,dim=1)
 
@@ -115,8 +113,8 @@ class BrainIBISDataModule(pl.LightningDataModule):
         self.val_and_test_transform = val_and_test_transform
         self.num_workers = num_workers
         self.pin_memory = pin_memory
-        self.persistent_workers=persistent_workers
-        self.name_class =name_class
+        self.persistent_workers = persistent_workers
+        self.name_class = name_class
 
         ### weights computing
         self.weights = []

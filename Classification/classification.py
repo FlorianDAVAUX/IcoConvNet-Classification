@@ -106,10 +106,10 @@ def cml():
 
     ##Paths
     paths_group = parser.add_argument_group('Paths to data')
-    paths_group.add_argument('--path_data', type=str, default='/ASD/Autism/IBIS/Proc_Data/IBIS_sa_eacsf_thickness', help='Path to data (default: /ASD/Autism/IBIS/Proc_Data/IBIS_sa_eacsf_thickness)')
-    paths_group.add_argument('--data_train', type=str, default='../Data/V06-12_train.csv', help='Path to train data (default: ../Data/V06-12_train.csv)')
-    paths_group.add_argument('--data_val', type=str, default='../Data/V06-12_val.csv', help='Path to validation data (default: ../Data/V06-12_val.csv)')
-    paths_group.add_argument('--data_test', type=str, default='../Data/V06-12_test.csv', help='Path to test data (default: ../Data/V06-12_test.csv)')
+    paths_group.add_argument('--path_data', help='Path to data',type=str, required=True)
+    paths_group.add_argument('--data_train', help='Path to train data',type=str, required=True)
+    paths_group.add_argument('--data_val', help='Path to validation data',type=str, required=True)
+    paths_group.add_argument('--data_test', help='Path to test data',type=str, required=True)
     paths_group.add_argument('--path_ico_left', type=str, default='../3DObject/sphere_f327680_v163842.vtk', help='Path to ico left (default: ../3DObject/sphere_f327680_v163842.vtk)')
     paths_group.add_argument('--path_ico_right', type=str, default='../3DObject/sphere_f327680_v163842.vtk', help='Path to ico right (default: ../3DObject/sphere_f327680_v163842.vtk)')
 

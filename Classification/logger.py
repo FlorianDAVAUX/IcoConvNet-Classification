@@ -44,4 +44,4 @@ class ImageLogger(Callback):
                 numpy_grid_images_noiseM = grid_images_noiseM.cpu().numpy()
                 trainer.logger.experiment.add_image('Image + noise M ', numpy_grid_images_noiseM, pl_module.global_step)
                 # trainer.logger.experiment.add_image('Image + noise M ', grid_images_noiseM, pl_module.global_step)
-       
+

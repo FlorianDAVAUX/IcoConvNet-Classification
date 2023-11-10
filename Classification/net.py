@@ -1,6 +1,5 @@
 import sys
-sys.path.insert(0, './Utils')
-sys.path.insert(0, './../Utils')
+sys.path.insert(0, '../Utils')
 
 import numpy as np
 import torch
